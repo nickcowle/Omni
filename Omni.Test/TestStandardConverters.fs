@@ -43,3 +43,8 @@ module TestStandardConverters =
             }
 
         testRoundTrip record
+
+    [<Fact>]
+    let ``Tuple round trips correctly`` () =
+        let tuple = 1234, "foo", false
+        testRoundTrip tuple

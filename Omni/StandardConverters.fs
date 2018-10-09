@@ -42,6 +42,37 @@ module StandardConverters =
                     None
         }
 
+    let tupleConverter (c : Converter) : Converter =
+        { new Converter with
+            member __.TryGetConverter<'a> () : 'a ConvertPair option =
+                let t = typeof<'a>
+
+                if FSharpType.IsTuple t then
+                    let converters = FSharpType.GetTupleElements t |> Array.map (Converter.tryGetConverterUntyped c)
+
+                    if converters |> Array.forall Option.isSome then
+                        let converters = converters |> Array.map Option.get
+
+                        let toSer (r : 'a) : Serialisable =
+                            let values = FSharpValue.GetTupleFields r
+                            Array.map2 fst converters values
+                            |> Serialisable.Array
+
+                        let fromSer (s : Serialisable) : 'a =
+                            match s with
+                            | Array arr ->
+                                let values = Array.map2 snd converters arr
+                                FSharpValue.MakeTuple(values, t) |> unbox
+                            | _ -> failwith "Could not deserialise tuple - converted form was not an array"
+
+                        Some (toSer, fromSer)
+
+                    else
+                        None
+                else
+                    None
+        }
+
     let customisations =
         [
             "String", makeSimple Serialisable.String (function Serialisable.String s -> s | _ -> failwith "")
@@ -57,6 +88,7 @@ module StandardConverters =
             "Bool Array", makeSimple Serialisable.BoolArray (function Serialisable.BoolArray a -> a | _ -> failwith "")
 
             "Record", ConverterCustomisation.Custom recordConverter
+            "Tuple", ConverterCustomisation.Custom tupleConverter
         ]
 
     let make : Converter =
