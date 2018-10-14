@@ -8,69 +8,121 @@ module StandardConverters =
     let makeSimple (toSer : 'a -> Serialisable) (fromSer : Serialisable -> 'a) : ConverterCustomisation =
         ConverterCustomisation.makeForType (fun _ -> toSer, fromSer)
 
-    let recordConverter (c : Converter) : Converter =
+    let recordConverterInner<'a> (c : Converter) =
+        let t = typeof<'a>
+
+        if FSharpType.IsRecord t then
+            let converters =
+                FSharpType.GetRecordFields t
+                |> Array.map (fun pi -> pi.Name, Converter.tryGetConverterUntyped c pi.PropertyType)
+
+            if converters |> Array.forall (snd >> Option.isSome) then
+                let converters = converters |> Array.map (fun (name, c) -> name, c |> Option.get)
+
+                let toSer (r : 'a) : Serialisable =
+                    let values = FSharpValue.GetRecordFields r
+                    Seq.map2 (fun (name, (toSer, _)) o -> name, toSer o) converters values
+                    |> Map.ofSeq
+                    |> Serialisable.Object
+
+                let fromSer (s : Serialisable) : 'a =
+                    match s with
+                    | Object m ->
+                        let values = converters |> Array.map (fun (name, (_, fromSer)) -> Map.find name m |> fromSer)
+                        FSharpValue.MakeRecord(t, values) |> unbox
+                    | _ -> failwith "Could not deserialise record - converted form was not an object"
+
+                Some (toSer, fromSer)
+
+            else
+                None
+        else
+            None
+
+    let recordConverter (c : Converter) =
         { new Converter with
-            member __.TryGetConverter<'a> () : 'a ConvertPair option =
-                let t = typeof<'a>
-
-                if FSharpType.IsRecord t then
-                    let converters =
-                        FSharpType.GetRecordFields t
-                        |> Array.map (fun pi -> pi.Name, Converter.tryGetConverterUntyped c pi.PropertyType)
-
-                    if converters |> Array.forall (snd >> Option.isSome) then
-                        let converters = converters |> Array.map (fun (name, c) -> name, c |> Option.get)
-
-                        let toSer (r : 'a) : Serialisable =
-                            let values = FSharpValue.GetRecordFields r
-                            Seq.map2 (fun (name, (toSer, _)) o -> name, toSer o) converters values
-                            |> Map.ofSeq
-                            |> Serialisable.Object
-
-                        let fromSer (s : Serialisable) : 'a =
-                            match s with
-                            | Object m ->
-                                let values = converters |> Array.map (fun (name, (_, fromSer)) -> Map.find name m |> fromSer)
-                                FSharpValue.MakeRecord(t, values) |> unbox
-                            | _ -> failwith "Could not deserialise record - converted form was not an object"
-
-                        Some (toSer, fromSer)
-
-                    else
-                        None
-                else
-                    None
+            member __.TryGetConverter<'a> () = recordConverterInner<'a> c
         }
 
-    let tupleConverter (c : Converter) : Converter =
+    let tupleConverterInner<'a> (c : Converter) =
+        let t = typeof<'a>
+
+        if FSharpType.IsTuple t then
+            let converters = FSharpType.GetTupleElements t |> Array.map (Converter.tryGetConverterUntyped c)
+
+            if converters |> Array.forall Option.isSome then
+                let converters = converters |> Array.map Option.get
+
+                let toSer (r : 'a) : Serialisable =
+                    let values = FSharpValue.GetTupleFields r
+                    Array.map2 fst converters values
+                    |> Serialisable.Array
+
+                let fromSer (s : Serialisable) : 'a =
+                    match s with
+                    | Array arr ->
+                        let values = Array.map2 snd converters arr
+                        FSharpValue.MakeTuple(values, t) |> unbox
+                    | _ -> failwith "Could not deserialise tuple - converted form was not an array"
+
+                Some (toSer, fromSer)
+
+            else
+                None
+        else
+            None
+
+    let tupleConverter (c : Converter)  =
         { new Converter with
-            member __.TryGetConverter<'a> () : 'a ConvertPair option =
-                let t = typeof<'a>
+            member __.TryGetConverter<'a> () = tupleConverterInner<'a> c
+        }
 
-                if FSharpType.IsTuple t then
-                    let converters = FSharpType.GetTupleElements t |> Array.map (Converter.tryGetConverterUntyped c)
+    let unionConverterInner<'a> (c : Converter) =
+        let t = typeof<'a>
 
-                    if converters |> Array.forall Option.isSome then
-                        let converters = converters |> Array.map Option.get
+        let tryCreateConverterForUnionCase (case : UnionCaseInfo) : obj ConvertPair array option =
+            let cs = case.GetFields () |> Array.map (fun pi -> Converter.tryGetConverterUntyped c pi.PropertyType)
+            if cs |> Array.forall Option.isSome then
+                cs |> Array.map Option.get |> Some
+            else
+                None
 
-                        let toSer (r : 'a) : Serialisable =
-                            let values = FSharpValue.GetTupleFields r
-                            Array.map2 fst converters values
-                            |> Serialisable.Array
+        if FSharpType.IsUnion t then
+            let cases = FSharpType.GetUnionCases t
+            let converters = cases |> Array.map tryCreateConverterForUnionCase
+            if converters |> Array.forall Option.isSome then
+                let converters = Seq.map2 (fun (case : UnionCaseInfo) converter -> case.Name, (case, converter |> Option.get)) cases converters |> Map.ofSeq
 
-                        let fromSer (s : Serialisable) : 'a =
-                            match s with
-                            | Array arr ->
-                                let values = Array.map2 snd converters arr
-                                FSharpValue.MakeTuple(values, t) |> unbox
-                            | _ -> failwith "Could not deserialise tuple - converted form was not an array"
+                let toSer (u : 'a) =
+                    let (case, fields) = FSharpValue.GetUnionFields(u, t)
+                    let cs = Map.find case.Name converters |> snd
+                    seq {
+                        yield Serialisable.String case.Name
+                        yield! Seq.map2 (fun (toSer, _) f -> toSer f) cs fields
+                    }
+                    |> Array.ofSeq
+                    |> Serialisable.Array
 
-                        Some (toSer, fromSer)
+                let fromSer (s : Serialisable) : 'a =
+                    match s with
+                    | Array arr ->
+                        match arr.[0] with
+                        | String s ->
+                            let case, cs = Map.find s converters
+                            let os = Seq.map2 (fun (_, fromSer) s -> fromSer s) cs (arr |> Seq.tail) |> Array.ofSeq
+                            FSharpValue.MakeUnion (case, os) |> unbox
+                        | _ -> failwith "Could not deserialise union - first element was not a string"
+                    | _ -> failwith "Could not deserialise union - converted form was not an array"
 
-                    else
-                        None
-                else
-                    None
+                Some (toSer, fromSer)
+            else
+                None
+        else
+            None
+
+    let unionConverter (c : Converter)  =
+        { new Converter with
+            member __.TryGetConverter<'a> () = unionConverterInner<'a> c
         }
 
     let customisations =
@@ -89,6 +141,7 @@ module StandardConverters =
 
             "Record", ConverterCustomisation.Custom recordConverter
             "Tuple", ConverterCustomisation.Custom tupleConverter
+            "Union", ConverterCustomisation.Custom unionConverter
         ]
 
     let make : Converter =
