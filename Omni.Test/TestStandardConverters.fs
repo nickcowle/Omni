@@ -18,25 +18,30 @@ module TestStandardConverters =
 
     let standard = StandardConverters.make
 
-    let testRoundTrip (input : 'a) =
+    let testRoundTrip (input : 'a) (ser : Serialisable) =
         match standard.TryGetConverter<'a> () with
         | Some (toSer, fromSer) ->
-            let ser = toSer input
-            Assert.Equal<'a>(input, ser |> fromSer)
-            Assert.Equal<Serialisable>(ser, ser |> fromSer |> toSer)
+            Assert.Equal(ser, toSer input)
+            Assert.Equal<'a>(input, fromSer ser)
         | None -> Assert.True(false, sprintf "Could not get converter for type %A" typeof<'a>)
 
     [<Fact>]
     let ``String round trips correctly`` () =
-        testRoundTrip "foo"
+        let v = "foo"
+        let ser = Serialisable.String "foo"
+        testRoundTrip v ser
 
     [<Fact>]
     let ``Int round trips correctly`` () =
-        testRoundTrip 1234
+        let v = 1234
+        let ser = Serialisable.Int32 1234
+        testRoundTrip v ser
 
     [<Fact>]
     let ``String array round trips correctly`` () =
-        testRoundTrip [| "foo" ; "bar" ; "baz" |]
+        let v = [| "foo" ; "bar" ; "baz" |]
+        let ser = Serialisable.StringArray [| "foo" ; "bar" ; "baz" |]
+        testRoundTrip v ser
 
     [<Fact>]
     let ``Record type round trips correctly`` () =
@@ -47,21 +52,36 @@ module TestStandardConverters =
                 Bar = [| "foo" ; "bar" ; "baz" |]
             }
 
-        testRoundTrip record
+        let m =
+            [
+                "Foo", Serialisable.Int32 1234
+                "Bar", Serialisable.StringArray [| "foo" ; "bar" ; "baz" |]
+            ]
+            |> Map.ofList
+            |> Serialisable.Object
+
+        testRoundTrip record m
 
     [<Fact>]
     let ``Tuple round trips correctly`` () =
-        let tuple = 1234, "foo", false
-        testRoundTrip tuple
+        let v = 1234, "foo", false
+        let ser = Serialisable.Array [| Serialisable.Int32 1234 ; Serialisable.String "foo" ; Serialisable.Bool false |]
+        testRoundTrip v ser
 
     [<Fact>]
     let ``Union case with no members round trips correctly`` () =
-        testRoundTrip Foo
+        let v = Foo
+        let ser = Serialisable.Array [| Serialisable.String "Foo" |]
+        testRoundTrip v ser
 
     [<Fact>]
     let ``Union case with one member round trips correctly`` () =
-        testRoundTrip (Bar 1234)
+        let v = Bar 1234
+        let ser = Serialisable.Array [| Serialisable.String "Bar" ; Serialisable.Int32 1234 |]
+        testRoundTrip v ser
 
     [<Fact>]
     let ``Union case with two members round trips correctly`` () =
-        testRoundTrip (Baz (true, "baz"))
+        let v = Baz (true, "baz")
+        let ser = Serialisable.Array [| Serialisable.String "Baz" ; Serialisable.Bool true ; Serialisable.String "baz" |]
+        testRoundTrip v ser
