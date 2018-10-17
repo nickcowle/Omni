@@ -19,7 +19,32 @@ module Converter =
             | Some f -> Some f
             | None -> findRelevantCustomisation cs converter
 
-    let make (customisations : (string * ConverterCustomisation) list) : Converter =
+    let private makeCached (c : Converter) : CachingConverter =
+
+        let converters = System.Collections.Generic.Dictionary ()
+        let e = Event<_> ()
+
+        { new CachingConverter with
+            member __.TryGetConverter<'a> () =
+
+                let t = typeof<'a>
+                let name = t.FullName
+                match converters.TryGetValue name with
+                | true, c ->
+                    e.Trigger (t, true)
+                    c |> unbox |> Some
+                | false, _ ->
+                    e.Trigger (t, false)
+                    match c.TryGetConverter<'a> () with
+                    | Some c ->
+                        converters.Add(name, c |> box)
+                        Some c
+                    | None -> None
+
+            member __.ConverterRequested = e.Publish
+        }
+
+    let make (customisations : (string * ConverterCustomisation) list) : CachingConverter =
 
         let self = ref None
 
@@ -29,8 +54,10 @@ module Converter =
                     findRelevantCustomisation<'a> customisations self.Value.Value
             }
 
-        self := Some converter
-        converter
+        let cached = makeCached converter
+
+        self := Some cached
+        cached
 
     let private tryGetConverterUntypedInner<'a> (converter : Converter) : obj ConvertPair option =
         match converter.TryGetConverter<'a> () with

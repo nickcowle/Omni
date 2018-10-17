@@ -144,5 +144,5 @@ module StandardConverters =
             "Union", ConverterCustomisation.Custom unionConverter
         ]
 
-    let make : Converter =
+    let make () : CachingConverter =
         Converter.make customisations

@@ -16,7 +16,7 @@ type TestUnionType =
 
 module TestStandardConverters =
 
-    let standard = StandardConverters.make
+    let standard = StandardConverters.make ()
 
     let testRoundTrip (input : 'a) (ser : Serialisable) =
         match standard.TryGetConverter<'a> () with
@@ -85,3 +85,23 @@ module TestStandardConverters =
         let v = Baz (true, "baz")
         let ser = Serialisable.Array [| Serialisable.String "Baz" ; Serialisable.Bool true ; Serialisable.String "baz" |]
         testRoundTrip v ser
+
+    [<Fact>]
+    let ``Repeated requests for an int Converter are cached`` () =
+
+        let standard = StandardConverters.make ()
+        let requested = ResizeArray ()
+        standard.ConverterRequested.Add requested.Add
+
+        standard.TryGetConverter<int> () |> ignore
+        standard.TryGetConverter<int> () |> ignore
+        standard.TryGetConverter<int> () |> ignore
+
+        let expected =
+            [
+                typeof<int>, false
+                typeof<int>, true
+                typeof<int>, true
+            ]
+
+        Assert.Equal(expected, requested)

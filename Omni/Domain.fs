@@ -1,5 +1,7 @@
 namespace Omni
 
+open System
+
 type Serialisable =
 | String of string
 | Int32 of int32
@@ -18,6 +20,10 @@ type Serialisable =
 type 'a ConvertPair = ('a -> Serialisable) * (Serialisable -> 'a)
 
 type Converter = abstract member TryGetConverter<'a> : unit -> 'a ConvertPair option
+
+type CachingConverter =
+    inherit Converter
+    abstract member ConverterRequested : (Type * bool) IEvent
 
 type ConverterForTypeEvaluator<'ret> = abstract member Eval : (Converter -> 'a ConvertPair) -> 'ret
 type ConverterForTypeCrate = abstract member Apply : ConverterForTypeEvaluator<'ret> -> 'ret
