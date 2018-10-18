@@ -14,11 +14,12 @@ type TestUnionType =
 | Bar of int
 | Baz of bool * string
 
+type IntTree = Leaf of int | Branch of IntTree * IntTree
+
 module TestStandardConverters =
 
-    let standard = StandardConverters.make ()
-
     let testRoundTrip (input : 'a) (ser : Serialisable) =
+        let standard = StandardConverters.make ()
         match standard.TryGetConverter<'a> () with
         | Some (toSer, fromSer) ->
             Assert.Equal(ser, toSer input)
@@ -102,6 +103,54 @@ module TestStandardConverters =
                 typeof<int>, false
                 typeof<int>, true
                 typeof<int>, true
+            ]
+
+        Assert.Equal(expected, requested)
+
+    [<Fact>]
+    let ``Recursively-defined type round trips correctly`` () =
+
+        let v = Branch (Branch (Leaf 12, Leaf 34), Branch (Leaf 56, Leaf 78))
+
+        let ser =
+            Serialisable.Array
+                [|
+                    Serialisable.String "Branch"
+                    Serialisable.Array
+                        [|
+                            Serialisable.String "Branch"
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Int32 12 |]
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Int32 34 |]
+                        |]
+                    Serialisable.Array
+                        [|
+                            Serialisable.String "Branch"
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Int32 56 |]
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Int32 78 |]
+                        |]
+                |]
+
+        testRoundTrip v ser
+
+    [<Fact>]
+    let ``Requests for a recursively-defined type only occur once`` () =
+
+        let standard = StandardConverters.make ()
+        let requested = ResizeArray ()
+        standard.ConverterRequested.Add requested.Add
+
+        let v = Branch (Branch (Leaf 12, Leaf 34), Branch (Leaf 56, Leaf 78))
+
+        match standard.TryGetConverter<IntTree> () with
+        | Some (toSer, _) ->
+            v |> toSer |> ignore
+        | None ->
+            Assert.True false
+
+        let expected =
+            [
+                typeof<IntTree>, false
+                typeof<int>, false
             ]
 
         Assert.Equal(expected, requested)

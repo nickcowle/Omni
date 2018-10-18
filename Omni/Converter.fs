@@ -44,14 +44,33 @@ module Converter =
             member __.ConverterRequested = e.Publish
         }
 
+    let private withConvertPair (pair : 'a ConvertPair) (c : Converter) =
+
+        { new Converter with
+            member __.TryGetConverter<'b> () =
+                if typeof<'b> = typeof<'a> then
+                    pair |> unbox |> Some
+                else
+                    c.TryGetConverter<'b> ()
+        }
+
     let make (customisations : (string * ConverterCustomisation) list) : CachingConverter =
 
-        let self = ref None
+        let self : CachingConverter option Ref = ref None
 
         let converter =
             { new Converter with
                 member __.TryGetConverter<'a> () =
-                    findRelevantCustomisation<'a> customisations self.Value.Value
+
+                    let pair = ref None
+
+                    let withAConverter =
+                        let toSer a = fst pair.Value.Value a
+                        let fromSer s = snd pair.Value.Value s
+                        withConvertPair (toSer, fromSer) self.Value.Value
+
+                    findRelevantCustomisation<'a> customisations withAConverter
+                    |> Option.map (fun p -> pair := Some p ; p)
             }
 
         let cached = makeCached converter
