@@ -1,6 +1,7 @@
 namespace Omni.Test
 
 open Omni
+open System.IO
 open Xunit
 
 type TestRecordType =
@@ -21,10 +22,19 @@ module TestStandardConverters =
     let testRoundTrip (input : 'a) (ser : Serialisable) =
         let standard = StandardConverters.make ()
         match standard.TryGetConverter<'a> () with
+        | None -> Assert.True(false, sprintf "Could not get converter for type %A" typeof<'a>)
         | Some (toSer, fromSer) ->
             Assert.Equal(ser, toSer input)
             Assert.Equal<'a>(input, fromSer ser)
-        | None -> Assert.True(false, sprintf "Could not get converter for type %A" typeof<'a>)
+
+            let deserialised =
+                use writer = new StringWriter ()
+                Json.serialise writer ser
+                let json = writer.ToString ()
+                use reader = new StringReader(json)
+                Json.deserialise reader
+
+            Assert.Equal(ser, deserialised)
 
     [<Fact>]
     let ``String round trips correctly`` () =

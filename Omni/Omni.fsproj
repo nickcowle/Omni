@@ -12,6 +12,7 @@
     <Compile Include="ConverterCustomisation.fs" />
     <Compile Include="Converter.fs" />
     <Compile Include="StandardConverters.fs" />
+    <Compile Include="Json.fs" />
   </ItemGroup>
 
   <ItemGroup>
