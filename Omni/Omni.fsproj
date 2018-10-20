@@ -13,6 +13,7 @@
     <Compile Include="Converter.fs" />
     <Compile Include="StandardConverters.fs" />
     <Compile Include="Json.fs" />
+    <Compile Include="Binary.fs" />
   </ItemGroup>
 
   <ItemGroup>

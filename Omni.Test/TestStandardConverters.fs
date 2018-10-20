@@ -19,7 +19,8 @@ type IntTree = Leaf of int | Branch of IntTree * IntTree
 
 module TestStandardConverters =
 
-    let testRoundTrip (input : 'a) (ser : Serialisable) =
+    let testRoundTripSerialisable (input : 'a) (ser : Serialisable) =
+
         let standard = StandardConverters.make ()
         match standard.TryGetConverter<'a> () with
         | None -> Assert.True(false, sprintf "Could not get converter for type %A" typeof<'a>)
@@ -27,14 +28,30 @@ module TestStandardConverters =
             Assert.Equal(ser, toSer input)
             Assert.Equal<'a>(input, fromSer ser)
 
-            let deserialised =
-                use writer = new StringWriter ()
-                Json.serialise writer ser
-                let json = writer.ToString ()
-                use reader = new StringReader(json)
-                Json.deserialise reader
+    let testRoundTripJson (ser : Serialisable) =
 
-            Assert.Equal(ser, deserialised)
+        use writer = new StringWriter ()
+        Json.serialise writer ser
+        let json = writer.ToString ()
+        use reader = new StringReader(json)
+        let deserialised = Json.deserialise reader
+
+        Assert.Equal(ser, deserialised)
+
+    let testRoundTripBinary (ser : Serialisable) =
+
+        use stream = new MemoryStream ()
+        Binary.serialise stream ser
+        stream.Position <- 0L
+        let deserialised = Binary.deserialise stream
+
+        Assert.Equal(ser, deserialised)
+
+    let testRoundTrip (input : 'a) (ser : Serialisable) =
+
+        testRoundTripSerialisable input ser
+        testRoundTripJson ser
+        testRoundTripBinary ser
 
     [<Fact>]
     let ``String round trips correctly`` () =
