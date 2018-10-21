@@ -6,7 +6,7 @@ open FSharp.Reflection
 module StandardConverters =
 
     let makeSimple (toSer : 'a -> Serialisable) (fromSer : Serialisable -> 'a) : ConverterCustomisation =
-        ConverterCustomisation.makeForType (fun _ -> toSer, fromSer)
+        ConverterCustomisation.makeForType (fun _ -> Some (toSer, fromSer))
 
     let recordConverterInner<'a> (c : Converter) =
         let t = typeof<'a>
@@ -120,10 +120,27 @@ module StandardConverters =
         else
             None
 
-    let unionConverter (c : Converter)  =
+    let unionConverter (c : Converter) =
         { new Converter with
             member __.TryGetConverter<'a> () = unionConverterInner<'a> c
         }
+
+    let seqConverter =
+        { new ConverterCustomisationWithTypeParameter with
+            member __.Eval<'a> () =
+                fun (c : Converter) ->
+                    match c.TryGetConverter<'a> () with
+                    | Some (toSerA, fromSerA) ->
+                        let toSer = Seq.map toSerA >> Array.ofSeq >> Serialisable.Array
+                        let fromSer =
+                            function
+                            | Array arr -> arr |> Seq.map fromSerA
+                            | _ -> failwith ""
+                        Some (toSer, fromSer)
+                    | None -> None
+                |> ConverterCustomisation.makeForType
+        }
+        |> WithTypeParamter
 
     let customisations =
         [
@@ -142,6 +159,8 @@ module StandardConverters =
             "Record", ConverterCustomisation.Custom recordConverter
             "Tuple", ConverterCustomisation.Custom tupleConverter
             "Union", ConverterCustomisation.Custom unionConverter
+
+            "Seq", seqConverter
         ]
 
     let make () : CachingConverter =

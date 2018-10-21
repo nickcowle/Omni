@@ -1,6 +1,5 @@
 ﻿namespace Omni
 
-open FSharp.Quotations.Patterns
 open System
 
 [<RequireQualifiedAccess>]
@@ -85,9 +84,4 @@ module Converter =
         | None -> None
 
     let tryGetConverterUntyped (converter : Converter) (t : Type) : obj ConvertPair option =
-        match <@ tryGetConverterUntypedInner @> with
-        | Lambda (_, Call (_, mi, _)) ->
-            let gen = mi.GetGenericMethodDefinition().MakeGenericMethod [| t |]
-            let o = gen.Invoke(null, [| converter|])
-            o :?> _
-        | _ -> failwith "tryGetConverterUntyped failed"
+        Reflection.invokeStatic <@ tryGetConverterUntypedInner @> [| t |] [| converter|] |> unbox

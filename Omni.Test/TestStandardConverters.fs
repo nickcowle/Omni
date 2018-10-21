@@ -181,3 +181,9 @@ module TestStandardConverters =
             ]
 
         Assert.Equal(expected, requested)
+
+    [<Fact>]
+    let ``String sequence round trips correctly`` () =
+        let v = [ "foo" ; "bar" ; "baz" ] |> Seq.ofList
+        let ser = Serialisable.Array [| String "foo" ; String "bar" ; String "baz" |]
+        testRoundTrip v ser

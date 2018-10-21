@@ -25,7 +25,7 @@ type CachingConverter =
     inherit Converter
     abstract member ConverterRequested : (Type * bool) IEvent
 
-type ConverterForTypeEvaluator<'ret> = abstract member Eval : (Converter -> 'a ConvertPair) -> 'ret
+type ConverterForTypeEvaluator<'ret> = abstract member Eval : (Converter -> 'a ConvertPair option) -> 'ret
 type ConverterForTypeCrate = abstract member Apply : ConverterForTypeEvaluator<'ret> -> 'ret
 
 type ConvertPairCrateEvaluator<'ret> = abstract member Eval : 'a ConvertPair -> 'ret
@@ -34,3 +34,6 @@ type ConvertPairCrate = abstract member Apply : ConvertPairCrateEvaluator<'ret> 
 type ConverterCustomisation =
 | ForType of ConverterForTypeCrate
 | Custom of (Converter -> Converter)
+| WithTypeParamter of ConverterCustomisationWithTypeParameter
+
+and ConverterCustomisationWithTypeParameter = abstract member Eval<'a> : unit -> ConverterCustomisation
