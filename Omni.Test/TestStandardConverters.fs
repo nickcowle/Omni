@@ -187,3 +187,15 @@ module TestStandardConverters =
         let v = [ "foo" ; "bar" ; "baz" ] |> Seq.ofList
         let ser = Serialisable.Array [| String "foo" ; String "bar" ; String "baz" |]
         testRoundTrip v ser
+
+    [<Fact>]
+    let ``Map from strings to ints round trips correctly`` () =
+        let v = [ "foo", 1234 ; "bar", 5678 ] |> Map.ofSeq
+        let ser =
+            Serialisable.Array
+                [|
+                    Serialisable.Array [| Serialisable.String "bar" ; Serialisable.Int32 5678 |]
+                    Serialisable.Array [| Serialisable.String "foo" ; Serialisable.Int32 1234 |]
+                |]
+
+        testRoundTrip v ser

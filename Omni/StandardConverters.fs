@@ -142,6 +142,26 @@ module StandardConverters =
         }
         |> WithTypeParamter
 
+    let mapConverterTyped<'k, 'v when 'k : comparison> (c : Converter) =
+        match c.TryGetConverter<('k * 'v) seq> () with
+        | Some (toSerSeq, fromSerSeq) ->
+            let toSer = Map.toSeq >> toSerSeq
+            let fromSer = fromSerSeq >> Map.ofSeq
+            Some (toSer, fromSer)
+        | None -> None
+
+    let mapConverterInner<'a> (c : Converter) =
+        if typedefof<'a> = typedefof<Map<_,_>> then
+            Reflection.invokeStatic <@ mapConverterTyped @> typeof<'a>.GenericTypeArguments [| c |]
+            |> unbox<'a ConvertPair option>
+        else
+            None
+
+    let mapConverter (c : Converter)  =
+        { new Converter with
+            member __.TryGetConverter<'a> () = mapConverterInner<'a> c
+        }
+
     let customisations =
         [
             "String", makeSimple Serialisable.String (function Serialisable.String s -> s | _ -> failwith "")
@@ -161,6 +181,7 @@ module StandardConverters =
             "Union", ConverterCustomisation.Custom unionConverter
 
             "Seq", seqConverter
+            "Map", ConverterCustomisation.Custom mapConverter
         ]
 
     let make () : CachingConverter =
