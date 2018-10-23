@@ -142,20 +142,20 @@ module StandardConverters =
         }
         |> WithTypeParamter
 
-    let mapConverterTyped<'k, 'v when 'k : comparison> (c : Converter) =
-        match c.TryGetConverter<('k * 'v) seq> () with
-        | Some (toSerSeq, fromSerSeq) ->
-            let toSer = Map.toSeq >> toSerSeq
-            let fromSer = fromSerSeq >> Map.ofSeq
-            Some (toSer, fromSer)
-        | None -> None
-
     let mapConverterInner<'a> (c : Converter) =
-        if typedefof<'a> = typedefof<Map<_,_>> then
-            Reflection.invokeStatic <@ mapConverterTyped @> typeof<'a>.GenericTypeArguments [| c |]
-            |> unbox<'a ConvertPair option>
-        else
-            None
+
+        let bindCrate (crate : 'a MapTeqCrate) =
+            crate.Apply
+                { new MapTeqCrateEvaluator<_,_> with
+                    member __.Eval teq =
+                        let bindConvertPair (toSerSeq, fromSerSeq) =
+                            let toSer = Teq.castTo teq >> Map.toSeq >> toSerSeq
+                            let fromSer = fromSerSeq >> Map.ofSeq >> Teq.castFrom teq
+                            Some (toSer, fromSer)
+                        c.TryGetConverter () |> Option.bind bindConvertPair
+                }
+
+        Shape.tryAsMap () |> Option.bind bindCrate
 
     let mapConverter (c : Converter)  =
         { new Converter with

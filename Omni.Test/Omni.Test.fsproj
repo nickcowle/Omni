@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="TestShape.fs" />
     <Compile Include="TestStandardConverters.fs" />
   </ItemGroup>
 
