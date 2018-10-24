@@ -125,19 +125,38 @@ module StandardConverters =
             member __.TryGetConverter<'a> () = unionConverterInner<'a> c
         }
 
+    let arrayConverterInner<'a> (c : Converter) : 'a ConvertPair option =
+
+        let bindCrate (crate : 'a ArrayTeqCrate) =
+            crate.Apply
+                { new ArrayTeqCrateEvaluator<_,_> with
+                    member __.Eval teq =
+                        let mapConvertPair (toSerA, fromSerA) =
+                            let toSer = Teq.castTo teq >> Array.map toSerA >> Serialisable.Array
+                            let fromSer =
+                                function
+                                | Array arr -> arr |> Array.map fromSerA |> Teq.castFrom teq
+                                | _ -> failwith ""
+                            toSer, fromSer
+                        c.TryGetConverter () |> Option.map mapConvertPair
+                }
+
+        Shape.tryAsArray () |> Option.bind bindCrate
+
+    let arrayConverter (c : Converter) =
+        { new Converter with
+            member __.TryGetConverter<'a> () = arrayConverterInner<'a> c
+        }
+
     let seqConverter =
         { new ConverterCustomisationWithTypeParameter with
             member __.Eval<'a> () =
                 fun (c : Converter) ->
-                    match c.TryGetConverter<'a> () with
-                    | Some (toSerA, fromSerA) ->
-                        let toSer = Seq.map toSerA >> Array.ofSeq >> Serialisable.Array
-                        let fromSer =
-                            function
-                            | Array arr -> arr |> Seq.map fromSerA
-                            | _ -> failwith ""
-                        Some (toSer, fromSer)
-                    | None -> None
+                    let mapConvertPair (toSerArr, fromSerArr) =
+                        let toSer = Seq.toArray >> toSerArr
+                        let fromSer = fromSerArr >> Array.toSeq
+                        toSer, fromSer
+                    c.TryGetConverter<'a array> () |> Option.map mapConvertPair
                 |> ConverterCustomisation.makeForType
         }
         |> WithTypeParamter
@@ -148,11 +167,11 @@ module StandardConverters =
             crate.Apply
                 { new MapTeqCrateEvaluator<_,_> with
                     member __.Eval teq =
-                        let bindConvertPair (toSerSeq, fromSerSeq) =
+                        let mapConvertPair (toSerSeq, fromSerSeq) =
                             let toSer = Teq.castTo teq >> Map.toSeq >> toSerSeq
                             let fromSer = fromSerSeq >> Map.ofSeq >> Teq.castFrom teq
-                            Some (toSer, fromSer)
-                        c.TryGetConverter () |> Option.bind bindConvertPair
+                            toSer, fromSer
+                        c.TryGetConverter () |> Option.map mapConvertPair
                 }
 
         Shape.tryAsMap () |> Option.bind bindCrate
@@ -175,6 +194,7 @@ module StandardConverters =
             "Long Array", makeSimple Serialisable.Int64Array (function Serialisable.Int64Array a -> a | _ -> failwith "")
             "Float Array", makeSimple Serialisable.FloatArray (function Serialisable.FloatArray a -> a | _ -> failwith "")
             "Bool Array", makeSimple Serialisable.BoolArray (function Serialisable.BoolArray a -> a | _ -> failwith "")
+            "Array", ConverterCustomisation.Custom arrayConverter
 
             "Record", ConverterCustomisation.Custom recordConverter
             "Tuple", ConverterCustomisation.Custom tupleConverter

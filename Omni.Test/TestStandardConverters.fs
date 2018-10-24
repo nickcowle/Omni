@@ -185,7 +185,7 @@ module TestStandardConverters =
     [<Fact>]
     let ``String sequence round trips correctly`` () =
         let v = [ "foo" ; "bar" ; "baz" ] |> Seq.ofList
-        let ser = Serialisable.Array [| String "foo" ; String "bar" ; String "baz" |]
+        let ser = Serialisable.StringArray [| "foo" ; "bar" ; "baz" |]
         testRoundTrip v ser
 
     [<Fact>]
