@@ -66,10 +66,10 @@ module Converter =
                     let withAConverter =
                         let toSer a = fst pair.Value.Value a
                         let fromSer s = snd pair.Value.Value s
-                        withConvertPair (toSer, fromSer) self.Value.Value
+                        withConvertPair (ConvertPair.Serialisable (toSer, fromSer)) self.Value.Value
 
                     findRelevantCustomisation<'a> customisations withAConverter
-                    |> Option.map (fun p -> pair := Some p ; p)
+                    |> Option.map (fun cp -> pair := cp |> ConvertPair.toSerPair |> Some ; cp)
             }
 
         let cached = makeCached converter
@@ -78,10 +78,26 @@ module Converter =
         cached
 
     let private tryGetConverterUntypedInner<'a> (converter : Converter) : obj ConvertPair option =
-        match converter.TryGetConverter<'a> () with
-        | Some (toSer, fromSer) ->
-            Some (unbox >> toSer, fromSer >> box)
-        | None -> None
+
+        let untypePair (toSer, fromSer) = unbox >> toSer, fromSer >> box
+
+        let untype cp =
+            match cp with
+            | ConvertPair.String       p -> untypePair p |> ConvertPair.String
+            | ConvertPair.Int32        p -> untypePair p |> ConvertPair.Int32
+            | ConvertPair.Int64        p -> untypePair p |> ConvertPair.Int64
+            | ConvertPair.Float        p -> untypePair p |> ConvertPair.Float
+            | ConvertPair.Bool         p -> untypePair p |> ConvertPair.Bool
+            | ConvertPair.Object       p -> untypePair p |> ConvertPair.Object
+            | ConvertPair.Array        p -> untypePair p |> ConvertPair.Array
+            | ConvertPair.StringArray  p -> untypePair p |> ConvertPair.StringArray
+            | ConvertPair.Int32Array   p -> untypePair p |> ConvertPair.Int32Array
+            | ConvertPair.Int64Array   p -> untypePair p |> ConvertPair.Int64Array
+            | ConvertPair.FloatArray   p -> untypePair p |> ConvertPair.FloatArray
+            | ConvertPair.BoolArray    p -> untypePair p |> ConvertPair.BoolArray
+            | ConvertPair.Serialisable p -> untypePair p |> ConvertPair.Serialisable
+
+        converter.TryGetConverter<'a> () |> Option.map untype
 
     let tryGetConverterUntyped (converter : Converter) (t : Type) : obj ConvertPair option =
         Reflection.invokeStatic <@ tryGetConverterUntypedInner @> [| t |] [| converter|] |> unbox

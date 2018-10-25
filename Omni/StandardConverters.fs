@@ -5,8 +5,8 @@ open FSharp.Reflection
 [<RequireQualifiedAccess>]
 module StandardConverters =
 
-    let makeSimple (toSer : 'a -> Serialisable) (fromSer : Serialisable -> 'a) : ConverterCustomisation =
-        ConverterCustomisation.makeForType (fun _ -> Some (toSer, fromSer))
+    let makeSimple serPair : ConverterCustomisation =
+        ConverterCustomisation.makeForType (fun _ -> serPair (id, id) |> Some)
 
     let recordConverterInner<'a> (c : Converter) =
         let t = typeof<'a>
@@ -19,20 +19,16 @@ module StandardConverters =
             if converters |> Array.forall (snd >> Option.isSome) then
                 let converters = converters |> Array.map (fun (name, c) -> name, c |> Option.get)
 
-                let toSer (r : 'a) : Serialisable =
+                let toSer (r : 'a) =
                     let values = FSharpValue.GetRecordFields r
-                    Seq.map2 (fun (name, (toSer, _)) o -> name, toSer o) converters values
+                    Seq.map2 (fun (name, cp) o -> name, (cp |> ConvertPair.toSerPair |> fst) o) converters values
                     |> Map.ofSeq
-                    |> Serialisable.Object
 
-                let fromSer (s : Serialisable) : 'a =
-                    match s with
-                    | Object m ->
-                        let values = converters |> Array.map (fun (name, (_, fromSer)) -> Map.find name m |> fromSer)
-                        FSharpValue.MakeRecord(t, values) |> unbox
-                    | _ -> failwith "Could not deserialise record - converted form was not an object"
+                let fromSer (m : Map<string, Serialisable>) =
+                    let values = converters |> Array.map (fun (name, cp) -> Map.find name m |> (cp |> ConvertPair.toSerPair |> snd))
+                    FSharpValue.MakeRecord(t, values) |> unbox
 
-                Some (toSer, fromSer)
+                ConvertPair.Object (toSer, fromSer) |> Some
 
             else
                 None
@@ -53,19 +49,15 @@ module StandardConverters =
             if converters |> Array.forall Option.isSome then
                 let converters = converters |> Array.map Option.get
 
-                let toSer (r : 'a) : Serialisable =
+                let toSer (r : 'a) =
                     let values = FSharpValue.GetTupleFields r
-                    Array.map2 fst converters values
-                    |> Serialisable.Array
+                    Array.map2 (ConvertPair.toSerPair >> fst) converters values
 
-                let fromSer (s : Serialisable) : 'a =
-                    match s with
-                    | Array arr ->
-                        let values = Array.map2 snd converters arr
-                        FSharpValue.MakeTuple(values, t) |> unbox
-                    | _ -> failwith "Could not deserialise tuple - converted form was not an array"
+                let fromSer arr =
+                    let values = Array.map2 (ConvertPair.toSerPair >> snd) converters arr
+                    FSharpValue.MakeTuple(values, t) |> unbox
 
-                Some (toSer, fromSer)
+                ConvertPair.Array (toSer, fromSer) |> Some
 
             else
                 None
@@ -98,23 +90,19 @@ module StandardConverters =
                     let cs = Map.find case.Name converters |> snd
                     seq {
                         yield Serialisable.String case.Name
-                        yield! Seq.map2 (fun (toSer, _) f -> toSer f) cs fields
+                        yield! Seq.map2 (ConvertPair.toSerPair >> fst) cs fields
                     }
                     |> Array.ofSeq
-                    |> Serialisable.Array
 
-                let fromSer (s : Serialisable) : 'a =
-                    match s with
-                    | Array arr ->
-                        match arr.[0] with
-                        | String s ->
-                            let case, cs = Map.find s converters
-                            let os = Seq.map2 (fun (_, fromSer) s -> fromSer s) cs (arr |> Seq.tail) |> Array.ofSeq
-                            FSharpValue.MakeUnion (case, os) |> unbox
-                        | _ -> failwith "Could not deserialise union - first element was not a string"
-                    | _ -> failwith "Could not deserialise union - converted form was not an array"
+                let fromSer (arr : Serialisable array) =
+                    match arr.[0] with
+                    | String s ->
+                        let case, cs = Map.find s converters
+                        let os = Seq.map2 (ConvertPair.toSerPair >> snd) cs (arr |> Seq.tail) |> Array.ofSeq
+                        FSharpValue.MakeUnion (case, os) |> unbox
+                    | _ -> failwith "Could not deserialise union - first element was not a string"
 
-                Some (toSer, fromSer)
+                ConvertPair.Array (toSer, fromSer) |> Some
             else
                 None
         else
@@ -125,19 +113,17 @@ module StandardConverters =
             member __.TryGetConverter<'a> () = unionConverterInner<'a> c
         }
 
-    let arrayConverterInner<'a> (c : Converter) : 'a ConvertPair option =
+    let arrayConverterInner<'a> (c : Converter) =
 
         let bindCrate (crate : 'a ArrayTeqCrate) =
             crate.Apply
                 { new ArrayTeqCrateEvaluator<_,_> with
                     member __.Eval teq =
-                        let mapConvertPair (toSerA, fromSerA) =
-                            let toSer = Teq.castTo teq >> Array.map toSerA >> Serialisable.Array
-                            let fromSer =
-                                function
-                                | Array arr -> arr |> Array.map fromSerA |> Teq.castFrom teq
-                                | _ -> failwith ""
-                            toSer, fromSer
+                        let mapConvertPair cp =
+                            let toSerA, fromSerA = cp |> ConvertPair.toSerPair
+                            let toSer = Teq.castTo teq >> Array.map toSerA
+                            let fromSer = Array.map fromSerA >> Teq.castFrom teq
+                            ConvertPair.Array (toSer, fromSer)
                         c.TryGetConverter () |> Option.map mapConvertPair
                 }
 
@@ -152,10 +138,11 @@ module StandardConverters =
         { new ConverterCustomisationWithTypeParameter with
             member __.Eval<'a> () =
                 fun (c : Converter) ->
-                    let mapConvertPair (toSerArr, fromSerArr) =
+                    let mapConvertPair cp =
+                        let toSerArr, fromSerArr = cp |> ConvertPair.toSerPair
                         let toSer = Seq.toArray >> toSerArr
                         let fromSer = fromSerArr >> Array.toSeq
-                        toSer, fromSer
+                        ConvertPair.Serialisable (toSer, fromSer)
                     c.TryGetConverter<'a array> () |> Option.map mapConvertPair
                 |> ConverterCustomisation.makeForType
         }
@@ -167,10 +154,11 @@ module StandardConverters =
             crate.Apply
                 { new MapTeqCrateEvaluator<_,_> with
                     member __.Eval teq =
-                        let mapConvertPair (toSerSeq, fromSerSeq) =
+                        let mapConvertPair cp =
+                            let toSerSeq, fromSerSeq = cp |> ConvertPair.toSerPair
                             let toSer = Teq.castTo teq >> Map.toSeq >> toSerSeq
                             let fromSer = fromSerSeq >> Map.ofSeq >> Teq.castFrom teq
-                            toSer, fromSer
+                            ConvertPair.Serialisable (toSer, fromSer)
                         c.TryGetConverter () |> Option.map mapConvertPair
                 }
 
@@ -183,17 +171,17 @@ module StandardConverters =
 
     let customisations =
         [
-            "String", makeSimple Serialisable.String (function Serialisable.String s -> s | _ -> failwith "")
-            "Int", makeSimple Serialisable.Int32 (function Serialisable.Int32 i -> i | _ -> failwith "")
-            "Long", makeSimple Serialisable.Int64 (function Serialisable.Int64 l -> l | _ -> failwith "")
-            "Float", makeSimple Serialisable.Float (function Serialisable.Float f -> f | _ -> failwith "")
-            "Bool", makeSimple Serialisable.Bool (function Serialisable.Bool b -> b | _ -> failwith "")
+            "String", makeSimple ConvertPair.String
+            "Int", makeSimple ConvertPair.Int32
+            "Long", makeSimple ConvertPair.Int64
+            "Float", makeSimple ConvertPair.Float
+            "Bool", makeSimple ConvertPair.Bool
 
-            "String Array", makeSimple Serialisable.StringArray (function Serialisable.StringArray a -> a | _ -> failwith "")
-            "Int Array", makeSimple Serialisable.Int32Array (function Serialisable.Int32Array a -> a | _ -> failwith "")
-            "Long Array", makeSimple Serialisable.Int64Array (function Serialisable.Int64Array a -> a | _ -> failwith "")
-            "Float Array", makeSimple Serialisable.FloatArray (function Serialisable.FloatArray a -> a | _ -> failwith "")
-            "Bool Array", makeSimple Serialisable.BoolArray (function Serialisable.BoolArray a -> a | _ -> failwith "")
+            "String Array", makeSimple ConvertPair.StringArray
+            "Int Array", makeSimple ConvertPair.Int32Array
+            "Long Array", makeSimple ConvertPair.Int64Array
+            "Float Array", makeSimple ConvertPair.FloatArray
+            "Bool Array", makeSimple ConvertPair.BoolArray
             "Array", ConverterCustomisation.Custom arrayConverter
 
             "Record", ConverterCustomisation.Custom recordConverter

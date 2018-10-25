@@ -24,7 +24,8 @@ module TestStandardConverters =
         let standard = StandardConverters.make ()
         match standard.TryGetConverter<'a> () with
         | None -> Assert.True(false, sprintf "Could not get converter for type %A" typeof<'a>)
-        | Some (toSer, fromSer) ->
+        | Some cp ->
+            let toSer, fromSer = cp |> ConvertPair.toSerPair
             Assert.Equal(ser, toSer input)
             Assert.Equal<'a>(input, fromSer ser)
 
@@ -169,7 +170,8 @@ module TestStandardConverters =
         let v = Branch (Branch (Leaf 12, Leaf 34), Branch (Leaf 56, Leaf 78))
 
         match standard.TryGetConverter<IntTree> () with
-        | Some (toSer, _) ->
+        | Some cp ->
+            let toSer = cp |> ConvertPair.toSerPair |> fst
             v |> toSer |> ignore
         | None ->
             Assert.True false
