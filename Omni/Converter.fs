@@ -6,6 +6,20 @@ open System
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Converter =
 
+    let empty =
+        { new Converter with
+            member __.TryGetConverter () = None
+        }
+
+    let singleton (pair : 'a ConvertPair) =
+        { new Converter with
+            member __.TryGetConverter<'b> () =
+                if typeof<'b> = typeof<'a> then
+                    pair |> unbox<'b ConvertPair> |> Some
+                else
+                    None
+        }
+
     let rec findRelevantCustomisation<'a>
         (customisations : (string * ConverterCustomisation) list)
         (converter : Converter)
@@ -14,7 +28,7 @@ module Converter =
         match customisations with
         | [] -> None
         | (_, c)::cs ->
-            match ConverterCustomisation.tryGetConverter<'a> c converter with
+            match (c converter).TryGetConverter<'a> () with
             | Some f -> Some f
             | None -> findRelevantCustomisation cs converter
 

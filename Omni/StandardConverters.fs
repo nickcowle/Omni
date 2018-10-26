@@ -6,7 +6,7 @@ open FSharp.Reflection
 module StandardConverters =
 
     let makeSimple serPair : ConverterCustomisation =
-        ConverterCustomisation.makeForType (fun _ -> serPair (id, id) |> Some)
+        ConverterCustomisation.makeForType (fun _ -> serPair (id, id))
 
     let recordConverterInner<'a> (c : Converter) =
         let t = typeof<'a>
@@ -138,15 +138,15 @@ module StandardConverters =
         { new ConverterCustomisationWithTypeParameter with
             member __.Eval<'a> () =
                 fun (c : Converter) ->
-                    let mapConvertPair cp =
+                    match c.TryGetConverter<'a array> () with
+                    | Some cp ->
                         let toSerArr, fromSerArr = cp |> ConvertPair.toSerPair
                         let toSer = Seq.toArray >> toSerArr
                         let fromSer = fromSerArr >> Array.toSeq
-                        ConvertPair.Serialisable (toSer, fromSer)
-                    c.TryGetConverter<'a array> () |> Option.map mapConvertPair
-                |> ConverterCustomisation.makeForType
+                        ConvertPair.Serialisable (toSer, fromSer) |> Converter.singleton
+                    | None -> Converter.empty
         }
-        |> WithTypeParamter
+        |> ConverterCustomisation.makeWithTypeParameter
 
     let mapConverterInner<'a> (c : Converter) =
 
@@ -182,14 +182,14 @@ module StandardConverters =
             "Long Array", makeSimple ConvertPair.Int64Array
             "Float Array", makeSimple ConvertPair.FloatArray
             "Bool Array", makeSimple ConvertPair.BoolArray
-            "Array", ConverterCustomisation.Custom arrayConverter
+            "Array", arrayConverter
 
-            "Record", ConverterCustomisation.Custom recordConverter
-            "Tuple", ConverterCustomisation.Custom tupleConverter
-            "Union", ConverterCustomisation.Custom unionConverter
+            "Record", recordConverter
+            "Tuple", tupleConverter
+            "Union", unionConverter
 
             "Seq", seqConverter
-            "Map", ConverterCustomisation.Custom mapConverter
+            "Map", mapConverter
         ]
 
     let make () : CachingConverter =

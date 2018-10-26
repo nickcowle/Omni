@@ -4,43 +4,31 @@
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ConverterCustomisation =
 
-    let makeForType<'a> (f : Converter -> 'a ConvertPair option) : ConverterCustomisation =
-        { new ConverterForTypeCrate with
-            member __.Apply e = e.Eval f
-        }
-        |> ForType
+    let makeForType (f : Converter -> 'a ConvertPair) : ConverterCustomisation =
+        fun c ->
+            { new Converter with
+                member __.TryGetConverter<'b> () =
+                    if typeof<'a> = typeof<'b> then
+                        f c |> box |> unbox<'b ConvertPair> |> Some
+                    else
+                        None
+            }
 
-    let makeCustom (f : Converter -> Converter) : ConverterCustomisation =
-        Custom f
-
-    let makeWithTypeParameter (withTypeParameter : ConverterCustomisationWithTypeParameter) : ConverterCustomisation =
-        WithTypeParamter withTypeParameter
-
-    let getWithTypeParameter<'a> (withTypeParameter : ConverterCustomisationWithTypeParameter) : ConverterCustomisation =
+    let private getWithTypeParameter<'a> (withTypeParameter : ConverterCustomisationWithTypeParameter) : ConverterCustomisation =
         withTypeParameter.Eval<'a> ()
 
-    let rec tryGetConverter<'a> (customisation : ConverterCustomisation) : Converter -> 'a ConvertPair option =
-        match customisation with
-        | ForType crate ->
-            crate.Apply
-                { new ConverterForTypeEvaluator<_> with
-                    member __.Eval (f : Converter -> 'b ConvertPair option) =
-                        if typeof<'a> = typeof<'b> then
-                            f |> box |> unbox<Converter -> 'a ConvertPair option>
-                        else
-                            fun _ -> None
-                }
-        | Custom f ->
-            f >> fun c -> c.TryGetConverter<'a> ()
-        | WithTypeParamter withTypeParameter ->
-            fun c ->
-                let t = typeof<'a>
-                if t.IsGenericType then
-                    let ts = t.GetGenericArguments ()
-                    let p = ts |> Array.head
-                    let customisation =
-                        Reflection.invokeStatic <@ getWithTypeParameter @> [| p |] [| withTypeParameter |]
-                        :?> ConverterCustomisation
-                    tryGetConverter<'a> customisation c
-                else
-                    None
+    let makeWithTypeParameter (withTypeParameter : ConverterCustomisationWithTypeParameter) : ConverterCustomisation =
+        fun c ->
+            { new Converter with
+                member __.TryGetConverter<'a> () =
+                    let t = typeof<'a>
+                    if t.IsGenericType then
+                        let ts = t.GetGenericArguments ()
+                        let p = ts |> Array.head
+                        let customisation =
+                            Reflection.invokeStatic <@ getWithTypeParameter @> [| p |] [| withTypeParameter |]
+                            :?> ConverterCustomisation
+                        (customisation c).TryGetConverter<'a> ()
+                    else
+                        None
+            }
