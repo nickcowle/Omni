@@ -4,9 +4,7 @@ open System
 
 type Serialisable =
 | String of string
-| Int32 of int32
-| Int64 of int64
-| Float of float
+| Number of string
 | Bool of bool
 | Object of Map<string, Serialisable>
 | Array of Serialisable array
@@ -16,9 +14,7 @@ type SerPair<'a, 'ser> = ('a -> 'ser) * ('ser -> 'a)
 [<RequireQualifiedAccess>]
 type 'a ConvertPair =
 | String of SerPair<'a, string>
-| Int32 of SerPair<'a, int32>
-| Int64 of SerPair<'a, int64>
-| Float of SerPair<'a, float>
+| Number of SerPair<'a, string>
 | Bool of SerPair<'a, bool>
 | Object of SerPair<'a, Map<string, Serialisable>>
 | Array of SerPair<'a, Serialisable array>

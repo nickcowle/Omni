@@ -98,9 +98,7 @@ module Converter =
         let untype cp =
             match cp with
             | ConvertPair.String       p -> untypePair p |> ConvertPair.String
-            | ConvertPair.Int32        p -> untypePair p |> ConvertPair.Int32
-            | ConvertPair.Int64        p -> untypePair p |> ConvertPair.Int64
-            | ConvertPair.Float        p -> untypePair p |> ConvertPair.Float
+            | ConvertPair.Number       p -> untypePair p |> ConvertPair.Number
             | ConvertPair.Bool         p -> untypePair p |> ConvertPair.Bool
             | ConvertPair.Object       p -> untypePair p |> ConvertPair.Object
             | ConvertPair.Array        p -> untypePair p |> ConvertPair.Array

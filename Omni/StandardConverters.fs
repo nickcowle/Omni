@@ -8,6 +8,9 @@ module StandardConverters =
     let makeSimple serPair : ConverterCustomisation =
         ConverterCustomisation.makeForType (fun _ -> serPair (id, id))
 
+    let makeNumber<'a> (toString : 'a -> string) (fromString : string -> 'a) : ConverterCustomisation =
+        ConverterCustomisation.makeForType (fun _ -> ConvertPair.Number (toString, fromString))
+
     let recordConverterInner<'a> (c : Converter) =
         let t = typeof<'a>
 
@@ -172,9 +175,9 @@ module StandardConverters =
     let customisations =
         [
             "String", makeSimple ConvertPair.String
-            "Int", makeSimple ConvertPair.Int32
-            "Long", makeSimple ConvertPair.Int64
-            "Float", makeSimple ConvertPair.Float
+            "Int", makeNumber<int> (fun i -> i.ToString ()) System.Int32.Parse
+            "Long", makeNumber<int64> (fun l -> l.ToString ()) System.Int64.Parse
+            "Float", makeNumber<float> (fun f -> f.ToString "G17") System.Double.Parse
             "Bool", makeSimple ConvertPair.Bool
 
             "Array", arrayConverter
