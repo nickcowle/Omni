@@ -80,10 +80,10 @@ module Converter =
                     let withAConverter =
                         let toSer a = fst pair.Value.Value a
                         let fromSer s = snd pair.Value.Value s
-                        withConvertPair (ConvertPair.Serialisable (toSer, fromSer)) self.Value.Value
+                        withConvertPair (toSer, fromSer) self.Value.Value
 
                     findRelevantCustomisation<'a> customisations withAConverter
-                    |> Option.map (fun cp -> pair := cp |> ConvertPair.toSerPair |> Some ; cp)
+                    |> Option.map (fun cp -> pair := cp |> Some ; cp)
             }
 
         let cached = makeCached converter
@@ -92,18 +92,7 @@ module Converter =
         cached
 
     let private tryGetConverterUntypedInner<'a> (converter : Converter) : obj ConvertPair option =
-
-        let untypePair (toSer, fromSer) = unbox >> toSer, fromSer >> box
-
-        let untype cp =
-            match cp with
-            | ConvertPair.String       p -> untypePair p |> ConvertPair.String
-            | ConvertPair.Number       p -> untypePair p |> ConvertPair.Number
-            | ConvertPair.Bool         p -> untypePair p |> ConvertPair.Bool
-            | ConvertPair.Object       p -> untypePair p |> ConvertPair.Object
-            | ConvertPair.Array        p -> untypePair p |> ConvertPair.Array
-            | ConvertPair.Serialisable p -> untypePair p |> ConvertPair.Serialisable
-
+        let untype (toSer, fromSer) = unbox >> toSer, fromSer >> box
         converter.TryGetConverter<'a> () |> Option.map untype
 
     let tryGetConverterUntyped (converter : Converter) (t : Type) : obj ConvertPair option =

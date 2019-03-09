@@ -6,10 +6,10 @@ open FSharp.Reflection
 module StandardConverters =
 
     let makeSimple serPair : ConverterCustomisation =
-        ConverterCustomisation.makeForType (fun _ -> serPair (id, id))
+        ConverterCustomisation.makeForType (fun _ -> serPair)
 
     let makeNumber<'a> (toString : 'a -> string) (fromString : string -> 'a) : ConverterCustomisation =
-        ConverterCustomisation.makeForType (fun _ -> ConvertPair.Number (toString, fromString))
+        ConverterCustomisation.makeForType (fun _ -> ConvertPair.makeNumber toString fromString)
 
     let recordConverterInner<'a> (c : Converter) =
         let t = typeof<'a>
@@ -24,14 +24,14 @@ module StandardConverters =
 
                 let toSer (r : 'a) =
                     let values = FSharpValue.GetRecordFields r
-                    Seq.map2 (fun (name, cp) o -> name, (cp |> ConvertPair.toSerPair |> fst) o) converters values
+                    Seq.map2 (fun (name, (toS, _)) o -> name, toS o) converters values
                     |> Map.ofSeq
 
                 let fromSer (m : Map<string, Serialisable>) =
-                    let values = converters |> Array.map (fun (name, cp) -> Map.find name m |> (cp |> ConvertPair.toSerPair |> snd))
+                    let values = converters |> Array.map (fun (name, (_, fromS)) -> Map.find name m |> fromS)
                     FSharpValue.MakeRecord(t, values) |> unbox
 
-                ConvertPair.Object (toSer, fromSer) |> Some
+                ConvertPair.makeObject toSer fromSer |> Some
 
             else
                 None
@@ -54,13 +54,13 @@ module StandardConverters =
 
                 let toSer (r : 'a) =
                     let values = FSharpValue.GetTupleFields r
-                    Array.map2 (ConvertPair.toSerPair >> fst) converters values
+                    Array.map2 fst converters values
 
                 let fromSer arr =
-                    let values = Array.map2 (ConvertPair.toSerPair >> snd) converters arr
+                    let values = Array.map2 snd converters arr
                     FSharpValue.MakeTuple(values, t) |> unbox
 
-                ConvertPair.Array (toSer, fromSer) |> Some
+                ConvertPair.makeArray toSer fromSer |> Some
 
             else
                 None
@@ -93,7 +93,7 @@ module StandardConverters =
                     let cs = Map.find case.Name converters |> snd
                     seq {
                         yield Serialisable.String case.Name
-                        yield! Seq.map2 (ConvertPair.toSerPair >> fst) cs fields
+                        yield! Seq.map2 fst cs fields
                     }
                     |> Array.ofSeq
 
@@ -101,11 +101,11 @@ module StandardConverters =
                     match arr.[0] with
                     | String s ->
                         let case, cs = Map.find s converters
-                        let os = Seq.map2 (ConvertPair.toSerPair >> snd) cs (arr |> Seq.tail) |> Array.ofSeq
+                        let os = Seq.map2 snd cs (arr |> Seq.tail) |> Array.ofSeq
                         FSharpValue.MakeUnion (case, os) |> unbox
                     | _ -> failwith "Could not deserialise union - first element was not a string"
 
-                ConvertPair.Array (toSer, fromSer) |> Some
+                ConvertPair.makeArray toSer fromSer |> Some
             else
                 None
         else
@@ -122,11 +122,10 @@ module StandardConverters =
             crate.Apply
                 { new ArrayTeqCrateEvaluator<_,_> with
                     member __.Eval teq =
-                        let mapConvertPair cp =
-                            let toSerA, fromSerA = cp |> ConvertPair.toSerPair
+                        let mapConvertPair (toSerA, fromSerA) =
                             let toSer = Teq.castTo teq >> Array.map toSerA
                             let fromSer = Array.map fromSerA >> Teq.castFrom teq
-                            ConvertPair.Array (toSer, fromSer)
+                            ConvertPair.makeArray toSer fromSer
                         c.TryGetConverter () |> Option.map mapConvertPair
                 }
 
@@ -142,11 +141,10 @@ module StandardConverters =
             member __.Eval<'a> () =
                 fun (c : Converter) ->
                     match c.TryGetConverter<'a array> () with
-                    | Some cp ->
-                        let toSerArr, fromSerArr = cp |> ConvertPair.toSerPair
+                    | Some (toSerArr, fromSerArr) ->
                         let toSer = Seq.toArray >> toSerArr
                         let fromSer = fromSerArr >> Array.toSeq
-                        ConvertPair.Serialisable (toSer, fromSer) |> Converter.singleton
+                        (toSer, fromSer) |> Converter.singleton
                     | None -> Converter.empty
         }
         |> ConverterCustomisation.makeWithTypeParameter
@@ -157,11 +155,10 @@ module StandardConverters =
             crate.Apply
                 { new MapTeqCrateEvaluator<_,_> with
                     member __.Eval teq =
-                        let mapConvertPair cp =
-                            let toSerSeq, fromSerSeq = cp |> ConvertPair.toSerPair
+                        let mapConvertPair (toSerSeq, fromSerSeq) =
                             let toSer = Teq.castTo teq >> Map.toSeq >> toSerSeq
                             let fromSer = fromSerSeq >> Map.ofSeq >> Teq.castFrom teq
-                            ConvertPair.Serialisable (toSer, fromSer)
+                            toSer, fromSer
                         c.TryGetConverter () |> Option.map mapConvertPair
                 }
 
@@ -174,11 +171,11 @@ module StandardConverters =
 
     let customisations =
         [
-            "String", makeSimple ConvertPair.String
+            "String", makeSimple ConvertPair.string
             "Int", makeNumber<int> (fun i -> i.ToString ()) System.Int32.Parse
             "Long", makeNumber<int64> (fun l -> l.ToString ()) System.Int64.Parse
             "Float", makeNumber<float> (fun f -> f.ToString "G17") System.Double.Parse
-            "Bool", makeSimple ConvertPair.Bool
+            "Bool", makeSimple ConvertPair.bool
 
             "Array", arrayConverter
             "Record", recordConverter
