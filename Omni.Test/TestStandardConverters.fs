@@ -69,7 +69,7 @@ module TestStandardConverters =
     [<Fact>]
     let ``String array round trips correctly`` () =
         let v = [| "foo" ; "bar" ; "baz" |]
-        let ser = Serialisable.StringArray [| "foo" ; "bar" ; "baz" |]
+        let ser = Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
         testRoundTrip v ser
 
     [<Fact>]
@@ -84,7 +84,7 @@ module TestStandardConverters =
         let m =
             [
                 "Foo", Serialisable.Int32 1234
-                "Bar", Serialisable.StringArray [| "foo" ; "bar" ; "baz" |]
+                "Bar", Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
             ]
             |> Map.ofList
             |> Serialisable.Object
@@ -187,7 +187,7 @@ module TestStandardConverters =
     [<Fact>]
     let ``String sequence round trips correctly`` () =
         let v = [ "foo" ; "bar" ; "baz" ] |> Seq.ofList
-        let ser = Serialisable.StringArray [| "foo" ; "bar" ; "baz" |]
+        let ser = Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
         testRoundTrip v ser
 
     [<Fact>]

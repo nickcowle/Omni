@@ -104,11 +104,6 @@ module Converter =
             | ConvertPair.Bool         p -> untypePair p |> ConvertPair.Bool
             | ConvertPair.Object       p -> untypePair p |> ConvertPair.Object
             | ConvertPair.Array        p -> untypePair p |> ConvertPair.Array
-            | ConvertPair.StringArray  p -> untypePair p |> ConvertPair.StringArray
-            | ConvertPair.Int32Array   p -> untypePair p |> ConvertPair.Int32Array
-            | ConvertPair.Int64Array   p -> untypePair p |> ConvertPair.Int64Array
-            | ConvertPair.FloatArray   p -> untypePair p |> ConvertPair.FloatArray
-            | ConvertPair.BoolArray    p -> untypePair p |> ConvertPair.BoolArray
             | ConvertPair.Serialisable p -> untypePair p |> ConvertPair.Serialisable
 
         converter.TryGetConverter<'a> () |> Option.map untype

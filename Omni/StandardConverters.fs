@@ -177,13 +177,7 @@ module StandardConverters =
             "Float", makeSimple ConvertPair.Float
             "Bool", makeSimple ConvertPair.Bool
 
-            "String Array", makeSimple ConvertPair.StringArray
-            "Int Array", makeSimple ConvertPair.Int32Array
-            "Long Array", makeSimple ConvertPair.Int64Array
-            "Float Array", makeSimple ConvertPair.FloatArray
-            "Bool Array", makeSimple ConvertPair.BoolArray
             "Array", arrayConverter
-
             "Record", recordConverter
             "Tuple", tupleConverter
             "Union", unionConverter

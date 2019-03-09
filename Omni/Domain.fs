@@ -10,12 +10,6 @@ type Serialisable =
 | Bool of bool
 | Object of Map<string, Serialisable>
 | Array of Serialisable array
-// Arrays for performance optimisations
-| StringArray of string array
-| Int32Array of int32 array
-| Int64Array of int64 array
-| FloatArray of float array
-| BoolArray of bool array
 
 type SerPair<'a, 'ser> = ('a -> 'ser) * ('ser -> 'a)
 
@@ -28,12 +22,6 @@ type 'a ConvertPair =
 | Bool of SerPair<'a, bool>
 | Object of SerPair<'a, Map<string, Serialisable>>
 | Array of SerPair<'a, Serialisable array>
-// Arrays for performance optimisations
-| StringArray of SerPair<'a, string array>
-| Int32Array of SerPair<'a, int32 array>
-| Int64Array of SerPair<'a, int64 array>
-| FloatArray of SerPair<'a, float array>
-| BoolArray of SerPair<'a, bool array>
 // ConvertPair also includes the ability to convert
 // to and from an arbitrary Serialisable type
 | Serialisable of SerPair<'a, Serialisable>
