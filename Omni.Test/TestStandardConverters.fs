@@ -19,68 +19,95 @@ type IntTree = Leaf of int | Branch of IntTree * IntTree
 
 module TestStandardConverters =
 
-    let testRoundTripSerialisable (input : 'a) (ser : Serialisable) =
+    type Test = abstract member Run : 'a -> Serialisable -> string -> unit
 
+    let getConverter<'a> () : 'a ConvertPair =
         let standard = StandardConverters.make ()
         match standard.TryGetConverter<'a> () with
-        | None -> Assert.True(false, sprintf "Could not get converter for type %A" typeof<'a>)
-        | Some (toSer, fromSer) ->
-            Assert.Equal(ser, toSer input)
-            Assert.Equal<'a>(input, fromSer ser)
+        | None -> failwithf "Could not get converter for type %A" typeof<'a>
+        | Some cp -> cp
 
-    let testRoundTripJson (ser : Serialisable) =
+    let testConvertToSerialisable (value : 'a) (expected : Serialisable) =
+        let (toSer, _) = getConverter ()
+        Assert.Equal(expected, toSer value)
 
-        use writer = new StringWriter ()
-        Json.serialise writer ser
-        let json = writer.ToString ()
+    let testConvertFromSerialisable (expected : 'a) (serialisable : Serialisable) =
+        let (_, fromSer) = getConverter<'a> ()
+        Assert.Equal<'a>(expected, fromSer serialisable)
+
+    let testSerialiseToJson (serialisable : Serialisable) (expected : string) =
+        use writer = new StringWriter()
+        Json.serialise writer serialisable
+        Assert.Equal(expected, writer.ToString ())
+
+    let testDeserialiseFromJson (expected : Serialisable) (json : string) =
         use reader = new StringReader(json)
-        let deserialised = Json.deserialise reader
+        let serialisable = Json.deserialise reader
+        Assert.Equal(expected, serialisable)
 
-        Assert.Equal(ser, deserialised)
-
-    let testRoundTripBinary (ser : Serialisable) =
-
+    let testRoundTripBinarySerialisation (serialisable : Serialisable) =
         use stream = new MemoryStream ()
-        Binary.serialise stream ser
+        Binary.serialise stream serialisable
         stream.Position <- 0L
         let deserialised = Binary.deserialise stream
+        Assert.Equal(serialisable, deserialised)
 
-        Assert.Equal(ser, deserialised)
+    let tests =
+        [
+            "Convert to Serialisable",         { new Test with member __.Run v s _ = testConvertToSerialisable v s }
+            "Convert from Serialisable",       { new Test with member __.Run v s _ = testConvertFromSerialisable v s }
+            "Serialise to JSON",               { new Test with member __.Run _ s j = testSerialiseToJson s j }
+            "Deserialise from JSON",           { new Test with member __.Run _ s j = testDeserialiseFromJson s j }
+            "Round-trip binary serialisation", { new Test with member __.Run _ s _ = testRoundTripBinarySerialisation s }
+        ]
+        |> Map.ofList
 
-    let testRoundTrip (input : 'a) (ser : Serialisable) =
+    let runTest (testType : string) (value : 'a) (serialisable : Serialisable) (json : string) =
+        let test = tests |> Map.find testType
+        test.Run value serialisable json
 
-        testRoundTripSerialisable input ser
-        testRoundTripJson ser
-        testRoundTripBinary ser
+    let testTypes =
+        tests |> Map.toList |> List.map (fun (tt,_) -> [| box tt |])
 
-    [<Fact>]
-    let ``String round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``String round trips correctly`` (testType : string) =
         let v = "foo"
         let ser = Serialisable.String "foo"
-        testRoundTrip v ser
+        let json = "\"foo\""
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``Int round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Int round trips correctly`` (testType : string) =
         let v = 1234
         let ser = Serialisable.Number (Number.Long 1234L)
-        testRoundTrip v ser
+        let json = "1234"
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``String array round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``String array round trips correctly`` (testType : string) =
         let v = [| "foo" ; "bar" ; "baz" |]
         let ser = Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
-        testRoundTrip v ser
+        let json = """[
+  "foo",
+  "bar",
+  "baz"
+]"""
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``Record type round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Record type round trips correctly`` (testType : string) =
 
-        let record =
+        let v =
             {
                 Foo = 1234
                 Bar = [| "foo" ; "bar" ; "baz" |]
             }
 
-        let m =
+        let ser =
             [
                 "Foo", Serialisable.Number (Number.Long 1234L)
                 "Bar", Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
@@ -88,31 +115,61 @@ module TestStandardConverters =
             |> Map.ofList
             |> Serialisable.Object
 
-        testRoundTrip record m
+        let json = """{
+  "Bar": [
+    "foo",
+    "bar",
+    "baz"
+  ],
+  "Foo": 1234
+}"""
 
-    [<Fact>]
-    let ``Tuple round trips correctly`` () =
+        runTest testType v ser json
+
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Tuple round trips correctly`` (testType : string) =
         let v = 1234, "foo", false
         let ser = Serialisable.Array [| Serialisable.Number (Number.Long 1234L) ; Serialisable.String "foo" ; Serialisable.Bool false |]
-        testRoundTrip v ser
+        let json = """[
+  1234,
+  "foo",
+  false
+]"""
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``Union case with no members round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Union case with no members round trips correctly`` (testType : string) =
         let v = Foo
         let ser = Serialisable.Array [| Serialisable.String "Foo" |]
-        testRoundTrip v ser
+        let json = """[
+  "Foo"
+]"""
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``Union case with one member round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Union case with one member round trips correctly`` (testType : string) =
         let v = Bar 1234
         let ser = Serialisable.Array [| Serialisable.String "Bar" ; Serialisable.Number (Number.Long 1234L) |]
-        testRoundTrip v ser
+        let json = """[
+  "Bar",
+  1234
+]"""
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``Union case with two members round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Union case with two members round trips correctly`` (testType : string) =
         let v = Baz (true, "baz")
         let ser = Serialisable.Array [| Serialisable.String "Baz" ; Serialisable.Bool true ; Serialisable.String "baz" |]
-        testRoundTrip v ser
+        let json = """[
+  "Baz",
+  true,
+  "baz"
+]"""
+        runTest testType v ser json
 
     [<Fact>]
     let ``Repeated requests for an int Converter are cached`` () =
@@ -134,8 +191,9 @@ module TestStandardConverters =
 
         Assert.Equal(expected, requested)
 
-    [<Fact>]
-    let ``Recursively-defined type round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Recursively-defined type round trips correctly`` (testType : string) =
 
         let v = Branch (Branch (Leaf 12, Leaf 34), Branch (Leaf 56, Leaf 78))
 
@@ -157,7 +215,33 @@ module TestStandardConverters =
                         |]
                 |]
 
-        testRoundTrip v ser
+        let json = """[
+  "Branch",
+  [
+    "Branch",
+    [
+      "Leaf",
+      12
+    ],
+    [
+      "Leaf",
+      34
+    ]
+  ],
+  [
+    "Branch",
+    [
+      "Leaf",
+      56
+    ],
+    [
+      "Leaf",
+      78
+    ]
+  ]
+]"""
+
+        runTest testType v ser json
 
     [<Fact>]
     let ``Requests for a recursively-defined type only occur once`` () =
@@ -182,14 +266,21 @@ module TestStandardConverters =
 
         Assert.Equal(expected, requested)
 
-    [<Fact>]
-    let ``String sequence round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``String sequence round trips correctly`` (testType : string) =
         let v = [ "foo" ; "bar" ; "baz" ] |> Seq.ofList
         let ser = Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
-        testRoundTrip v ser
+        let json = """[
+  "foo",
+  "bar",
+  "baz"
+]"""
+        runTest testType v ser json
 
-    [<Fact>]
-    let ``Map from strings to ints round trips correctly`` () =
+    [<Theory>]
+    [<MemberData"testTypes">]
+    let ``Map from strings to ints round trips correctly`` (testType : string) =
         let v = [ "foo", 1234 ; "bar", 5678 ] |> Map.ofSeq
         let ser =
             Serialisable.Array
@@ -197,5 +288,15 @@ module TestStandardConverters =
                     Serialisable.Array [| Serialisable.String "bar" ; Serialisable.Number (Number.Long 5678L) |]
                     Serialisable.Array [| Serialisable.String "foo" ; Serialisable.Number (Number.Long 1234L) |]
                 |]
+        let json = """[
+  [
+    "bar",
+    5678
+  ],
+  [
+    "foo",
+    1234
+  ]
+]"""
 
-        testRoundTrip v ser
+        runTest testType v ser json
