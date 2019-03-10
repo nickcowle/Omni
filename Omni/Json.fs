@@ -13,9 +13,9 @@ module Json =
         | Number (Long l) -> JValue.FromObject l
         | Number (Float f) -> JValue.FromObject f
         | Bool   b -> JValue.FromObject b
-        | Object m ->
+        | Object xs ->
             let o = JObject ()
-            m |> Map.toSeq |> Seq.iter (fun (k, v) -> o.Add(k, fromSerialisable v))
+            xs |> Seq.iter (fun (k, v) -> o.Add(k, fromSerialisable v))
             o :> JToken
         | Array a ->
             let arr = JArray ()
@@ -27,7 +27,7 @@ module Json =
         | :? JObject as jt ->
             jt.Children<JProperty> ()
             |> Seq.map (fun jt -> jt.Name, jt.Value |> toSerialisable)
-            |> Map.ofSeq
+            |> List.ofSeq
             |> Serialisable.Object
         | :? JValue as jt ->
             match jt.Type with

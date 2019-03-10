@@ -112,16 +112,15 @@ module TestStandardConverters =
                 "Foo", Serialisable.Number (Number.Long 1234L)
                 "Bar", Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
             ]
-            |> Map.ofList
             |> Serialisable.Object
 
         let json = """{
+  "Foo": 1234,
   "Bar": [
     "foo",
     "bar",
     "baz"
-  ],
-  "Foo": 1234
+  ]
 }"""
 
         runTest testType v ser json

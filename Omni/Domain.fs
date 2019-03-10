@@ -10,7 +10,7 @@ type Serialisable =
 | String of string
 | Number of Number
 | Bool of bool
-| Object of Map<string, Serialisable>
+| Object of (string * Serialisable) list
 | Array of Serialisable array
 
 type 'a ConvertPair = ('a -> Serialisable) * (Serialisable -> 'a)

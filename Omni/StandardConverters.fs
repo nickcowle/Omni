@@ -25,9 +25,10 @@ module StandardConverters =
                 let toSer (r : 'a) =
                     let values = FSharpValue.GetRecordFields r
                     Seq.map2 (fun (name, (toS, _)) o -> name, toS o) converters values
-                    |> Map.ofSeq
+                    |> List.ofSeq
 
-                let fromSer (m : Map<string, Serialisable>) =
+                let fromSer (xs : (string * Serialisable) list) =
+                    let m = xs |> Map.ofList
                     let values = converters |> Array.map (fun (name, (_, fromS)) -> Map.find name m |> fromS)
                     FSharpValue.MakeRecord(t, values) |> unbox
 
