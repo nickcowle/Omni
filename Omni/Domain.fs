@@ -2,9 +2,14 @@ namespace Omni
 
 open System
 
+type Number =
+| Int of int
+| Long of int64
+| Float of float
+
 type Serialisable =
 | String of string
-| Number of string
+| Number of Number
 | Bool of bool
 | Object of Map<string, Serialisable>
 | Array of Serialisable array
