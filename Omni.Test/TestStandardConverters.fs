@@ -62,7 +62,7 @@ module TestStandardConverters =
     [<Fact>]
     let ``Int round trips correctly`` () =
         let v = 1234
-        let ser = Serialisable.Number (Number.Int 1234)
+        let ser = Serialisable.Number (Number.Long 1234L)
         testRoundTrip v ser
 
     [<Fact>]
@@ -82,7 +82,7 @@ module TestStandardConverters =
 
         let m =
             [
-                "Foo", Serialisable.Number (Number.Int 1234)
+                "Foo", Serialisable.Number (Number.Long 1234L)
                 "Bar", Serialisable.Array [| Serialisable.String "foo" ; Serialisable.String "bar" ; Serialisable.String "baz" |]
             ]
             |> Map.ofList
@@ -93,7 +93,7 @@ module TestStandardConverters =
     [<Fact>]
     let ``Tuple round trips correctly`` () =
         let v = 1234, "foo", false
-        let ser = Serialisable.Array [| Serialisable.Number (Number.Int 1234) ; Serialisable.String "foo" ; Serialisable.Bool false |]
+        let ser = Serialisable.Array [| Serialisable.Number (Number.Long 1234L) ; Serialisable.String "foo" ; Serialisable.Bool false |]
         testRoundTrip v ser
 
     [<Fact>]
@@ -105,7 +105,7 @@ module TestStandardConverters =
     [<Fact>]
     let ``Union case with one member round trips correctly`` () =
         let v = Bar 1234
-        let ser = Serialisable.Array [| Serialisable.String "Bar" ; Serialisable.Number (Number.Int 1234) |]
+        let ser = Serialisable.Array [| Serialisable.String "Bar" ; Serialisable.Number (Number.Long 1234L) |]
         testRoundTrip v ser
 
     [<Fact>]
@@ -146,14 +146,14 @@ module TestStandardConverters =
                     Serialisable.Array
                         [|
                             Serialisable.String "Branch"
-                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Int 12) |]
-                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Int 34) |]
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Long 12L) |]
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Long 34L) |]
                         |]
                     Serialisable.Array
                         [|
                             Serialisable.String "Branch"
-                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Int 56) |]
-                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Int 78) |]
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Long 56L) |]
+                            Serialisable.Array [| Serialisable.String "Leaf" ; Serialisable.Number (Number.Long 78L) |]
                         |]
                 |]
 
@@ -194,8 +194,8 @@ module TestStandardConverters =
         let ser =
             Serialisable.Array
                 [|
-                    Serialisable.Array [| Serialisable.String "bar" ; Serialisable.Number (Number.Int 5678) |]
-                    Serialisable.Array [| Serialisable.String "foo" ; Serialisable.Number (Number.Int 1234) |]
+                    Serialisable.Array [| Serialisable.String "bar" ; Serialisable.Number (Number.Long 5678L) |]
+                    Serialisable.Array [| Serialisable.String "foo" ; Serialisable.Number (Number.Long 1234L) |]
                 |]
 
         testRoundTrip v ser

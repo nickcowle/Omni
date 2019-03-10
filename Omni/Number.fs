@@ -4,7 +4,7 @@
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Number =
 
-    let ofInt = Number.Int
+    let ofInt (i : int) = i |> int64 |> Number.Long
 
     let ofLong = Number.Long
 
@@ -12,7 +12,7 @@ module Number =
 
     let tryGetInt =
         function
-        | Int i -> i
+        | Long l -> int l
         | n -> failwithf "Tried to get Int value from %A" n
 
     let tryGetLong =

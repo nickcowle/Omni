@@ -3,7 +3,6 @@ namespace Omni
 open System
 
 type Number =
-| Int of int
 | Long of int64
 | Float of float
 
